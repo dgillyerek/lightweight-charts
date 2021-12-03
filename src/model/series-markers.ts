@@ -39,6 +39,8 @@ export interface SeriesMarker<TimeType> {
 	text?: string;
 	/**
 	 * The optional size of the marker.
+	 *
+	 * @defaultValue `1`
 	 */
 	size?: number;
 }
