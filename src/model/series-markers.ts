@@ -12,6 +12,7 @@ export type SeriesMarkerShape = 'circle' | 'square' | 'arrowUp' | 'arrowDown';
  * Represents a series marker.
  */
 export interface SeriesMarker<TimeType> {
+	price: number;
 	/**
 	 * The time of the marker.
 	 */

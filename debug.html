@@ -59,8 +59,8 @@
 					},
 					priceScale: {
 						scaleMargins: {
-							top: 0.3,
-							bottom: 0.25,
+							top: 0.1,
+							bottom: 0.1,
 						},
 						borderVisible: false,
 					},
@@ -82,7 +82,24 @@
 			var candleSeries = chart.addCandlestickSeries();
 			candleSeries.setData(data);
 
-			mainSeries.setData(generateData());
+			var markers = [];
+			markers.push({
+				time: data[7].time,
+				position: "inBar",
+				color: "white",
+				shape: "arrowDown",
+				text: "Sell @ 57 ",
+				price: 57,
+			});
+			markers.push({
+				time: data[8].time,
+				position: "inBar",
+				color: "white",
+				shape: "arrowUp",
+				text: "Buy @ 58 ",
+				price: 58,
+			});
+			this.candleSeries.setMarkers(markers);
 		</script>
 	</body>
 </html>

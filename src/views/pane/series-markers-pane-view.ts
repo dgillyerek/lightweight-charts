@@ -44,7 +44,7 @@ function fillSizeAndY(
 	timeScale: TimeScale,
 	firstValue: number
 ): void {
-	const inBarPrice = isNumber(seriesData) ? seriesData : seriesData.close;
+	const inBarPrice = isNumber(seriesData) ? seriesData : marker.price;
 	const highPrice = isNumber(seriesData) ? seriesData : seriesData.high;
 	const lowPrice = isNumber(seriesData) ? seriesData : seriesData.low;
 	const sizeMultiplier = isNumber(marker.size) ? Math.max(marker.size, 0) : 1;
