@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0"
+		/>
+		<title>Debug page</title>
+
+		<script
+			type="text/javascript"
+			src="./dist/lightweight-charts.standalone.development.js"
+		></script>
+		<script type="text/javascript" src="debug-data.js"></script>
+	</head>
+
+	<body style="padding: 0; margin: 0">
+		<div
+			id="container"
+			style="position: absolute; width: 100%; height: 100%"
+		></div>
+
+		<script type="text/javascript">
+			function getRandomInt(min, max) {
+				min = Math.ceil(min);
+				max = Math.floor(max);
+				return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
+			}
+
+			function generateData() {
+				var res = [];
+				var time = new Date(Date.UTC(2018, 0, 1, 0, 0, 0, 0));
+				var sum = 0;
+				for (var i = 0; i < 500; ++i) {
+					var ran = getRandomInt(0, 100);
+					var pos = getRandomInt(0, 4);
+					if (pos > 0) {
+						sum += ran;
+					} else {
+						sum -= ran;
+					}
+					res.push({
+						time: time.getTime() / 1000,
+						value: sum,
+					});
+
+					time.setUTCDate(time.getUTCDate() + 1);
+				}
+
+				return res;
+			}
+
+			var chart = LightweightCharts.createChart(
+				document.getElementById("container"),
+				{
+					crosshair: {
+						mode: LightweightCharts.CrosshairMode.Normal,
+					},
+					priceScale: {
+						scaleMargins: {
+							top: 0.3,
+							bottom: 0.25,
+						},
+						borderVisible: false,
+					},
+					layout: {
+						backgroundColor: "#131722",
+						textColor: "#d1d4dc",
+					},
+					grid: {
+						vertLines: {
+							color: "rgba(42, 46, 57, 0)",
+						},
+						horzLines: {
+							color: "rgba(42, 46, 57, 0.6)",
+						},
+					},
+				}
+			);
+
+			var candleSeries = chart.addCandlestickSeries();
+			candleSeries.setData(data);
+
+			mainSeries.setData(generateData());
+		</script>
+	</body>
+</html>
