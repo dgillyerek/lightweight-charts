@@ -14,9 +14,9 @@ import { Coordinate } from './coordinate';
 import { Crosshair, CrosshairOptions } from './crosshair';
 import { DefaultPriceScaleId, isDefaultPriceScale } from './default-price-scale';
 import { GridOptions } from './grid';
-import { InvalidateMask, InvalidationLevel } from './invalidate-mask';
+import { InvalidateMask, InvalidationLevel, ITimeScaleAnimation } from './invalidate-mask';
 import { IPriceDataSource } from './iprice-data-source';
-import { ColorType, LayoutOptions, LayoutOptionsInternal } from './layout-options';
+import { ColorType, LayoutOptions } from './layout-options';
 import { LocalizationOptions } from './localization-options';
 import { Magnet } from './magnet';
 import { DEFAULT_STRETCH_FACTOR, Pane } from './pane';
@@ -90,10 +90,8 @@ export interface HandleScaleOptions {
 
 	/**
 	 * Enable resetting scaling by double-clicking the left mouse button.
-	 *
-	 * @defaultValue `true`
 	 */
-	axisDoubleClickReset: boolean;
+	axisDoubleClickReset: AxisDoubleClickOptions | boolean;
 }
 
 /**
@@ -116,10 +114,13 @@ export interface KineticScrollOptions {
 }
 
 type HandleScaleOptionsInternal =
-	Omit<HandleScaleOptions, 'axisPressedMouseMove'>
+	Omit<HandleScaleOptions, 'axisPressedMouseMove' | 'axisDoubleClickReset'>
 	& {
 		/** @public */
 		axisPressedMouseMove: AxisPressedMouseMoveOptions;
+
+		/** @public */
+		axisDoubleClickReset: AxisDoubleClickOptions;
 	};
 
 /**
@@ -135,6 +136,25 @@ export interface AxisPressedMouseMoveOptions {
 
 	/**
 	 * Enable scaling the price axis by holding down the left mouse button and moving the mouse.
+	 *
+	 * @defaultValue `true`
+	 */
+	price: boolean;
+}
+
+/**
+ * Represents options for how the time and price axes react to mouse double click.
+ */
+export interface AxisDoubleClickOptions {
+	/**
+	 * Enable resetting scaling the time axis by double-clicking the left mouse button.
+	 *
+	 * @defaultValue `true`
+	 */
+	time: boolean;
+
+	/**
+	 * Enable reseting scaling the price axis by by double-clicking the left mouse button.
 	 *
 	 * @defaultValue `true`
 	 */
@@ -176,6 +196,39 @@ export type VisiblePriceScaleOptions = PriceScaleOptions;
 export type OverlayPriceScaleOptions = Omit<PriceScaleOptions, 'visible' | 'autoScale'>;
 
 /**
+ * Determine how to exit the tracking mode.
+ *
+ * By default, mobile users will long press to deactivate the scroll and have the ability to check values and dates.
+ * Another press is required to activate the scroll, be able to move left/right, zoom, etc.
+ */
+export const enum TrackingModeExitMode {
+	/**
+	 * Tracking Mode will be deactivated on touch end event.
+	 */
+	OnTouchEnd,
+	/**
+	 * Tracking Mode will be deactivated on the next tap event.
+	 */
+	OnNextTap,
+}
+
+/**
+ * Represent options for the tracking mode's behavior.
+ *
+ * Mobile users will not have the ability to see the values/dates like they do on desktop.
+ * To see it, they should enter the tracking mode. The tracking mode will deactivate the scrolling
+ * and make it possible to check values and dates.
+ */
+export interface TrackingModeOptions {
+	// eslint-disable-next-line tsdoc/syntax
+	/** @inheritDoc TrackingModeExitMode
+	 *
+	 * @defaultValue {@link TrackingModeExitMode.OnNextTap}
+	 */
+	exitMode: TrackingModeExitMode;
+}
+
+/**
  * Structure describing options of the chart. Series options are to be set separately
  */
 export interface ChartOptions {
@@ -207,14 +260,6 @@ export interface ChartOptions {
 	 * Layout options
 	 */
 	layout: LayoutOptions;
-
-	/**
-	 * Price scale options.
-	 *
-	 * @deprecated Use {@link leftPriceScale}, {@link rightPriceScale} or {@link overlayPriceScales} instead.
-	 * @internal
-	 */
-	priceScale: PriceScaleOptions;
 
 	/**
 	 * Left price scale options
@@ -264,17 +309,23 @@ export interface ChartOptions {
 	 * Kinetic scroll options
 	 */
 	kineticScroll: KineticScrollOptions;
+
+	// eslint-disable-next-line tsdoc/syntax
+	/** @inheritDoc TrackingModeOptions
+	 */
+	trackingMode: TrackingModeOptions;
+
 }
 
 export type ChartOptionsInternal =
-	Omit<ChartOptions, 'handleScroll' | 'handleScale' | 'priceScale' | 'layout'>
+	Omit<ChartOptions, 'handleScroll' | 'handleScale' | 'layout'>
 	& {
 		/** @public */
 		handleScroll: HandleScrollOptions;
 		/** @public */
 		handleScale: HandleScaleOptionsInternal;
 		/** @public */
-		layout: LayoutOptionsInternal;
+		layout: LayoutOptions;
 	};
 
 interface GradientColorsCache {
@@ -298,7 +349,6 @@ export class ChartModel implements IDestroyable {
 	private _serieses: Series[] = [];
 
 	private _width: number = 0;
-	private _initialTimeScrollPos: number | null = null;
 	private _hoveredSource: HoveredSource | null = null;
 	private readonly _priceScalesOptionsChanged: Delegate = new Delegate();
 	private _crosshairMoved: Delegate<TimePointIndex | null, Point | null> = new Delegate();
@@ -326,11 +376,11 @@ export class ChartModel implements IDestroyable {
 	}
 
 	public fullUpdate(): void {
-		this._invalidate(new InvalidateMask(InvalidationLevel.Full));
+		this._invalidate(InvalidateMask.full());
 	}
 
 	public lightUpdate(): void {
-		this._invalidate(new InvalidateMask(InvalidationLevel.Light));
+		this._invalidate(InvalidateMask.light());
 	}
 
 	public cursorUpdate(): void {
@@ -472,7 +522,7 @@ export class ChartModel implements IDestroyable {
 		// if autoscale option is true, it is ok, just recalculate by invalidation mask
 		// if autoscale option is false, autoscale anyway on the first draw
 		// also there is a scenario when autoscale is true in constructor and false later on applyOptions
-		const mask = new InvalidateMask(InvalidationLevel.Full);
+		const mask = InvalidateMask.full();
 		mask.invalidatePane(actualIndex, {
 			level: InvalidationLevel.None,
 			autoScale: true,
@@ -567,27 +617,17 @@ export class ChartModel implements IDestroyable {
 	}
 
 	public startScrollTime(x: Coordinate): void {
-		this._initialTimeScrollPos = x;
 		this._timeScale.startScroll(x);
 	}
 
-	public scrollTimeTo(x: Coordinate): boolean {
-		let res = false;
-		if (this._initialTimeScrollPos !== null && Math.abs(x - this._initialTimeScrollPos) > 20) {
-			this._initialTimeScrollPos = null;
-			res = true;
-		}
-
+	public scrollTimeTo(x: Coordinate): void {
 		this._timeScale.scrollTo(x);
 		this.recalculateAllPanes();
-		return res;
 	}
 
 	public endScrollTime(): void {
 		this._timeScale.endScroll();
 		this.lightUpdate();
-
-		this._initialTimeScrollPos = null;
 	}
 
 	public serieses(): readonly Series[] {
@@ -752,32 +792,44 @@ export class ChartModel implements IDestroyable {
 	}
 
 	public fitContent(): void {
-		const mask = new InvalidateMask(InvalidationLevel.Light);
+		const mask = InvalidateMask.light();
 		mask.setFitContent();
 		this._invalidate(mask);
 	}
 
 	public setTargetLogicalRange(range: LogicalRange): void {
-		const mask = new InvalidateMask(InvalidationLevel.Light);
+		const mask = InvalidateMask.light();
 		mask.applyRange(range);
 		this._invalidate(mask);
 	}
 
 	public resetTimeScale(): void {
-		const mask = new InvalidateMask(InvalidationLevel.Light);
+		const mask = InvalidateMask.light();
 		mask.resetTimeScale();
 		this._invalidate(mask);
 	}
 
 	public setBarSpacing(spacing: number): void {
-		const mask = new InvalidateMask(InvalidationLevel.Light);
+		const mask = InvalidateMask.light();
 		mask.setBarSpacing(spacing);
 		this._invalidate(mask);
 	}
 
 	public setRightOffset(offset: number): void {
-		const mask = new InvalidateMask(InvalidationLevel.Light);
+		const mask = InvalidateMask.light();
 		mask.setRightOffset(offset);
+		this._invalidate(mask);
+	}
+
+	public setTimeScaleAnimation(animation: ITimeScaleAnimation): void {
+		const mask = InvalidateMask.light();
+		mask.setTimeScaleAnimation(animation);
+		this._invalidate(mask);
+	}
+
+	public stopTimeScaleAnimation(): void {
+		const mask = InvalidateMask.light();
+		mask.stopTimeScaleAnimation();
 		this._invalidate(mask);
 	}
 

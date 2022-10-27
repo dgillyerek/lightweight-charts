@@ -10,7 +10,7 @@ import { DeepPartial, merge } from '../helpers/strict-type-checks';
 import { BarCoordinates, BarPrice, BarPrices } from './bar';
 import { Coordinate } from './coordinate';
 import { FirstValue, IPriceDataSource } from './iprice-data-source';
-import { LayoutOptionsInternal } from './layout-options';
+import { LayoutOptions } from './layout-options';
 import { LocalizationOptions } from './localization-options';
 import { PriceRangeImpl } from './price-range-impl';
 import {
@@ -85,11 +85,6 @@ export interface PriceScaleMargins {
 	bottom: number;
 }
 
-/**
- * Represents the position of a price axis relative to the chart.
- */
-export type PriceAxisPosition = 'left' | 'right' | 'none';
-
 /** Structure that describes price scale options */
 export interface PriceScaleOptions {
 	/**
@@ -123,14 +118,6 @@ export interface PriceScaleOptions {
 	alignLabels: boolean;
 
 	/**
-	 * Price scale's position on the chart.
-	 *
-	 * @deprecated Use options for different price scales instead
-	 * @internal
-	 */
-	position?: PriceAxisPosition;
-
-	/**
 	 * Price scale margins.
 	 *
 	 * @defaultValue `{ bottom: 0.1, top: 0.2 }`
@@ -161,6 +148,14 @@ export interface PriceScaleOptions {
 	borderColor: string;
 
 	/**
+	 * Price scale text color.
+	 * If not provided {@link LayoutOptions.textColor} is used.
+	 *
+	 * @defaultValue `undefined`
+	 */
+	textColor?: string;
+
+	/**
 	 * Show top and bottom corner labels only if entire text is visible.
 	 *
 	 * @defaultValue `false`
@@ -177,9 +172,9 @@ export interface PriceScaleOptions {
 	/**
 	 * Draw small horizontal line on price axis labels.
 	 *
-	 * @defaultValue `true`
+	 * @defaultValue `false`
 	 */
-	drawTicks: boolean;
+	ticksVisible: boolean;
 }
 
 interface RangeCache {
@@ -193,10 +188,15 @@ type PriceTransformer = (price: BarPrice, baseValue: number) => number;
 const percentageFormatter = new PercentageFormatter();
 const defaultPriceFormatter = new PriceFormatter(100, 1);
 
+interface MarksCache {
+	marks: PriceMark[];
+	firstValueIsNull: boolean;
+}
+
 export class PriceScale {
 	private readonly _id: string;
 
-	private readonly _layoutOptions: LayoutOptionsInternal;
+	private readonly _layoutOptions: LayoutOptions;
 	private readonly _localizationOptions: LocalizationOptions;
 	private readonly _options: PriceScaleOptions;
 
@@ -218,7 +218,7 @@ export class PriceScale {
 	private _dataSources: IPriceDataSource[] = [];
 	private _cachedOrderedSources: IPriceDataSource[] | null = null;
 
-	private _marksCache: PriceMark[] | null = null;
+	private _marksCache: MarksCache | null = null;
 
 	private _scaleStartPoint: number | null = null;
 	private _scrollStartPoint: number | null = null;
@@ -226,7 +226,7 @@ export class PriceScale {
 
 	private _logFormula: LogFormula = logFormulaForPriceRange(null);
 
-	public constructor(id: string, options: PriceScaleOptions, layoutOptions: LayoutOptionsInternal, localizationOptions: LocalizationOptions) {
+	public constructor(id: string, options: PriceScaleOptions, layoutOptions: LayoutOptions, localizationOptions: LocalizationOptions) {
 		this._id = id;
 		this._options = options;
 		this._layoutOptions = layoutOptions;
@@ -596,15 +596,25 @@ export class PriceScale {
 	}
 
 	public marks(): PriceMark[] {
-		if (this._marksCache) {
-			return this._marksCache;
+		const firstValueIsNull = this.firstValue() === null;
+
+		// do not recalculate marks if firstValueIsNull is true because in this case we'll always get empty result
+		// this could happen in case when a series had some data and then you set empty data to it (in a simplified case)
+		// we could display an empty price scale, but this is not good from UX
+		// so in this case we need to keep an previous marks to display them on the scale
+		// as one of possible examples for this situation could be the following:
+		// let's say you have a study/indicator attached to a price scale and then you decide to stop it, i.e. remove its data because of its visibility
+		// a user will see the previous marks on the scale until you turn on your study back or remove it from the chart completely
+		if (this._marksCache !== null && (firstValueIsNull || this._marksCache.firstValueIsNull === firstValueIsNull)) {
+			return this._marksCache.marks;
 		}
 
 		this._markBuilder.rebuildTickMarks();
-		this._marksCache = this._markBuilder.marks();
+		const marks = this._markBuilder.marks();
+		this._marksCache = { marks, firstValueIsNull };
 		this._onMarksChanged.fire();
 
-		return this._marksCache;
+		return marks;
 	}
 
 	public onMarksChanged(): ISubscription {

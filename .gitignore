@@ -27,9 +27,10 @@ package-lock.json
 /website/.docusaurus
 /website/.cache-loader
 /website/.previous-typings-cache/*.d.ts
-/website/static/img/lightweight-charts-logo.svg
+/website/versions.d.ts
 
 !/src/typings/**/*.d.ts
 
 # graphics tests out data
 /tests/e2e/graphics/.gendata/
+tests/e2e/coverage/.gendata

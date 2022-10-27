@@ -1,2 +1,2 @@
-export const expectedCoverage = 89.5;
+export const expectedCoverage = 92;
 export const threshold = 1;
